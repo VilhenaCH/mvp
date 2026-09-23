@@ -37,6 +37,47 @@ const audio = document.getElementById("audio");
 let roomCode = null, isHost = false, heartbeatTimer = null;
 let currentPlaylist = {}, currentState = {};
 let suppressSeek = false;
+let loadedTrackId = null, localPlaying = false;
+let currentTrackType = null;
+
+// ---- Suporte a YouTube (player oficial via IFrame API — nunca extraímos o áudio bruto) ----
+let ytPlayer = null, ytReady = false, pendingYtAction = null;
+window.onYouTubeIframeAPIReady = function () {
+  ytPlayer = new YT.Player("yt-player", {
+    height: "100%", width: "100%",
+    playerVars: { controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
+    events: { onReady: () => { ytReady = true; if (pendingYtAction) { pendingYtAction(); pendingYtAction = null; } } }
+  });
+};
+function extractYouTubeId(url) {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+function ytCall(fn) { if (ytReady) fn(); else pendingYtAction = fn; }
+
+// ---- Abstração de playback (esconde se é <audio> ou YouTube por trás) ----
+function isYT() { return currentTrackType === "youtube"; }
+function getCurrentTime() { return isYT() ? (ytReady ? ytPlayer.getCurrentTime() : 0) : audio.currentTime; }
+function getDuration() { return isYT() ? (ytReady ? ytPlayer.getDuration() : 0) : audio.duration; }
+function playMedia() { if (isYT()) ytCall(() => ytPlayer.playVideo()); else audio.play().catch(() => setRoomStatus("Clique em play para liberar o áudio.")); }
+function pauseMedia() { if (isYT()) ytCall(() => ytPlayer.pauseVideo()); else audio.pause(); }
+function seekMedia(t) { if (isYT()) ytCall(() => ytPlayer.seekTo(t, true)); else audio.currentTime = t; }
+
+function loadTrack(track, startAt) {
+  currentTrackType = track.type || "audio";
+  if (currentTrackType === "youtube") {
+    document.getElementById("art-icon").style.display = "none";
+    document.getElementById("yt-wrap").style.display = "block";
+    audio.pause(); audio.removeAttribute("src");
+    ytCall(() => ytPlayer.loadVideoById({ videoId: track.videoId, startSeconds: startAt || 0 }));
+  } else {
+    document.getElementById("yt-wrap").style.display = "none";
+    document.getElementById("art-icon").style.display = "flex";
+    if (ytReady) ytPlayer.stopVideo();
+    audio.src = track.url;
+    audio.currentTime = startAt || 0;
+  }
+}
 
 function fmt(s) {
   if (!isFinite(s) || s < 0) s = 0;
@@ -100,7 +141,7 @@ function enterRoom(code, host) {
   // heartbeat do host: corrige deriva mesmo sem nenhuma ação manual
   if (isHost) {
     heartbeatTimer = setInterval(() => {
-      if (!audio.paused) pushState({ position: audio.currentTime, playing: true });
+      if (localPlaying) pushState({ position: getCurrentTime(), playing: true });
     }, 3000);
   }
 }
@@ -145,16 +186,22 @@ function renderPlaylist() {
 function applyState() {
   const track = currentState.trackId ? currentPlaylist[currentState.trackId] : null;
   document.getElementById("track-name").textContent = track ? (track.name || track.url) : "Nenhuma música tocando";
-  if (track && audio.src !== track.url) audio.src = track.url;
 
-  if (!isHost && currentState.updatedAt) {
+  if (currentState.trackId !== loadedTrackId) {
+    loadedTrackId = currentState.trackId;
+    if (track) loadTrack(track, currentState.position || 0);
+  }
+
+  if (!isHost && currentState.updatedAt && track) {
     const expected = currentState.playing
       ? currentState.position + (serverNow() - currentState.updatedAt) / 1000
       : currentState.position;
-    if (Math.abs(audio.currentTime - expected) > 0.8) audio.currentTime = expected;
-    if (currentState.playing && audio.paused) audio.play().catch(() => setRoomStatus("Clique em play para liberar o áudio."));
-    if (!currentState.playing && !audio.paused) audio.pause();
+    if (Math.abs(getCurrentTime() - expected) > 0.8) seekMedia(expected);
   }
+
+  if (currentState.playing && !localPlaying) { playMedia(); localPlaying = true; }
+  if (!currentState.playing && localPlaying) { pauseMedia(); localPlaying = false; }
+
   document.getElementById("btn-play").textContent = currentState.playing ? "⏸" : "▶";
   renderPlaylist();
 }
@@ -167,23 +214,22 @@ function pushState(patch) {
 }
 
 function playTrack(id) {
-  audio.src = currentPlaylist[id].url;
-  audio.currentTime = 0;
+  // só empurra o estado — o listener de "state" (que roda pro host também) cuida de carregar e tocar
   pushState({ trackId: id, position: 0, playing: true });
-  audio.play().catch(() => {});
 }
 
 function togglePlay() {
   if (!isHost) { setRoomStatus("Só o host controla a reprodução."); return; }
-  if (audio.paused) { audio.play().catch(() => {}); pushState({ position: audio.currentTime, playing: true }); }
-  else { audio.pause(); pushState({ position: audio.currentTime, playing: false }); }
+  pushState({ position: getCurrentTime(), playing: !currentState.playing });
 }
 
 function addTrack() {
   const url = document.getElementById("input-track-url").value.trim();
   const name = document.getElementById("input-track-name").value.trim();
   if (!url) return;
-  push(ref(db, `rooms/${roomCode}/playlist`), { url, name });
+  const videoId = extractYouTubeId(url);
+  const track = videoId ? { url, name, type: "youtube", videoId } : { url, name, type: "audio" };
+  push(ref(db, `rooms/${roomCode}/playlist`), track);
   document.getElementById("input-track-url").value = "";
   document.getElementById("input-track-name").value = "";
 }
@@ -192,9 +238,9 @@ function onSeekInput() { suppressSeek = true; }
 function onSeekCommit(e) {
   suppressSeek = false;
   if (!isHost) return;
-  const t = (e.target.value / 100) * (audio.duration || 0);
-  audio.currentTime = t;
-  pushState({ position: t, playing: !audio.paused });
+  const t = (e.target.value / 100) * (getDuration() || 0);
+  seekMedia(t);
+  pushState({ position: t, playing: currentState.playing });
 }
 
 function copyInvite() {
@@ -216,13 +262,15 @@ document.getElementById("btn-add-track").onclick = addTrack;
 document.getElementById("btn-copy").onclick = copyInvite;
 document.getElementById("seek").addEventListener("input", onSeekInput);
 document.getElementById("seek").addEventListener("change", onSeekCommit);
-audio.addEventListener("timeupdate", () => {
-  document.getElementById("time-cur").textContent = fmt(audio.currentTime);
-  if (!suppressSeek) document.getElementById("seek").value = (audio.currentTime / (audio.duration || 1)) * 100;
-});
-audio.addEventListener("loadedmetadata", () => {
-  document.getElementById("time-dur").textContent = fmt(audio.duration);
-});
+
+// loop único de UI (necessário pro YouTube, que não emite "timeupdate" como o <audio>)
+setInterval(() => {
+  if (!roomCode) return;
+  const cur = getCurrentTime() || 0, dur = getDuration() || 0;
+  document.getElementById("time-cur").textContent = fmt(cur);
+  document.getElementById("time-dur").textContent = fmt(dur);
+  if (!suppressSeek) document.getElementById("seek").value = (cur / (dur || 1)) * 100;
+}, 400);
 
 const params = new URLSearchParams(location.search);
 const pre = params.get("room");
