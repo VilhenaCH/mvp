@@ -46,7 +46,10 @@ window.onYouTubeIframeAPIReady = function () {
   ytPlayer = new YT.Player("yt-player", {
     height: "100%", width: "100%",
     playerVars: { controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
-    events: { onReady: () => { ytReady = true; if (pendingYtAction) { pendingYtAction(); pendingYtAction = null; } } }
+    events: {
+      onReady: () => { ytReady = true; if (pendingYtAction) { pendingYtAction(); pendingYtAction = null; } },
+      onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED) handleTrackEnded(); }
+    }
   });
 };
 function extractYouTubeId(url) {
@@ -78,6 +81,20 @@ function loadTrack(track, startAt) {
     audio.currentTime = startAt || 0;
   }
 }
+
+// só o host reage ao fim da faixa (ele é quem escreve o estado — evita várias pessoas escrevendo ao mesmo tempo)
+function handleTrackEnded() {
+  if (!isHost) return;
+  if (currentState.loop) {
+    seekMedia(0);
+    playMedia();
+    pushState({ position: 0, playing: true });
+  } else {
+    pauseMedia();
+    pushState({ playing: false, position: getDuration() || currentState.position || 0 });
+  }
+}
+audio.addEventListener("ended", handleTrackEnded);
 
 function fmt(s) {
   if (!isFinite(s) || s < 0) s = 0;
@@ -203,7 +220,13 @@ function applyState() {
   if (!currentState.playing && localPlaying) { pauseMedia(); localPlaying = false; }
 
   document.getElementById("btn-play").textContent = currentState.playing ? "⏸" : "▶";
+  document.getElementById("btn-loop").classList.toggle("active", !!currentState.loop);
   renderPlaylist();
+}
+
+function toggleLoop() {
+  if (!isHost) { setRoomStatus("Só o host controla o loop."); return; }
+  pushState({ loop: !currentState.loop });
 }
 
 // ============================================================
@@ -223,11 +246,28 @@ function togglePlay() {
   pushState({ position: getCurrentTime(), playing: !currentState.playing });
 }
 
-function addTrack() {
+async function fetchYouTubeTitle(url) {
+  try {
+    const res = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.title || null;
+  } catch (e) { return null; }
+}
+
+async function addTrack() {
   const url = document.getElementById("input-track-url").value.trim();
-  const name = document.getElementById("input-track-name").value.trim();
+  let name = document.getElementById("input-track-name").value.trim();
   if (!url) return;
   const videoId = extractYouTubeId(url);
+  const btn = document.getElementById("btn-add-track");
+  if (videoId && !name) {
+    btn.textContent = "Buscando nome...";
+    btn.disabled = true;
+    name = (await fetchYouTubeTitle(url)) || "";
+    btn.textContent = "+ Adicionar";
+    btn.disabled = false;
+  }
   const track = videoId ? { url, name, type: "youtube", videoId } : { url, name, type: "audio" };
   push(ref(db, `rooms/${roomCode}/playlist`), track);
   document.getElementById("input-track-url").value = "";
@@ -258,6 +298,7 @@ document.getElementById("btn-join").onclick = () => {
   if (v) joinRoom(v); else setHomeStatus("Digite um código de sala.");
 };
 document.getElementById("btn-play").onclick = togglePlay;
+document.getElementById("btn-loop").onclick = toggleLoop;
 document.getElementById("btn-add-track").onclick = addTrack;
 document.getElementById("btn-copy").onclick = copyInvite;
 document.getElementById("seek").addEventListener("input", onSeekInput);
