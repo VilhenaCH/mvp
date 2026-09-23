@@ -21,7 +21,8 @@
 <main id="screen-room" class="card" style="display:none">
   <div id="room-code-label" class="room-code"></div>
 
-  <div class="art">♪</div>
+  <div class="art" id="art-icon">♪</div>
+  <div class="art" id="yt-wrap" style="display:none"><div id="yt-player" style="width:100%;height:100%"></div></div>
   <div id="track-name" class="track-name">Nenhuma música tocando</div>
 
   <input type="range" id="seek" class="seek" min="0" max="100" value="0">
@@ -36,7 +37,7 @@
 
   <div id="host-panel" style="display:none">
     <div class="section-label">ADICIONAR À FILA</div>
-    <input id="input-track-url" placeholder="URL da música (mp3, ogg...)">
+    <input id="input-track-url" placeholder="Link do YouTube ou URL direta de áudio (mp3...)">
     <input id="input-track-name" placeholder="Nome da faixa">
     <button id="btn-add-track" class="ghost">+ Adicionar</button>
   </div>
@@ -53,6 +54,7 @@
 
 <audio id="audio" crossorigin="anonymous"></audio>
 
+<script src="https://www.youtube.com/iframe_api"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
