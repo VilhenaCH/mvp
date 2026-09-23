@@ -1,9 +1,9 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
+// ============================================================
+// 1) CONFIGURAÇÃO DO FIREBASE
+// Crie um projeto em https://console.firebase.google.com,
+// ative "Realtime Database" (modo teste para começar) e cole
+// a config do seu projeto aqui:
+// ============================================================
 const firebaseConfig = {
   apiKey: "AIzaSyA_SvpC_AOO8E_KNbfMsdTFrMdj7ZrnPLg",
   authDomain: "cmvp-810b9.firebaseapp.com",
@@ -12,15 +12,6 @@ const firebaseConfig = {
   storageBucket: "cmvp-810b9.firebasestorage.app",
   messagingSenderId: "492904974389",
   appId: "1:492904974389:web:d132efe4eb1c3bf489c97c"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const firebaseConfig = {
-  apiKey: "COLE_AQUI",
-  authDomain: "SEU_PROJETO.firebaseapp.com",
-  databaseURL: "https://SEU_PROJETO-default-rtdb.firebaseio.com",
-  projectId: "SEU_PROJETO",
 };
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
