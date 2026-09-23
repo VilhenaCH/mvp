@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music Jam</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main id="screen-home" class="card">
+  <h1>Music Jam</h1>
+  <p class="sub">Ouçam a mesma música, ao mesmo tempo, juntos.</p>
+  <button id="btn-create" class="primary">Criar uma sala</button>
+  <div class="divider">ou</div>
+  <input id="input-code" placeholder="Código da sala (ex: F8K2P)" maxlength="8">
+  <button id="btn-join" class="ghost">Entrar na sala</button>
+  <p id="home-status" class="status"></p>
+</main>
+
+<main id="screen-room" class="card" style="display:none">
+  <div id="room-code-label" class="room-code"></div>
+
+  <div class="art">♪</div>
+  <div id="track-name" class="track-name">Nenhuma música tocando</div>
+
+  <input type="range" id="seek" class="seek" min="0" max="100" value="0">
+  <div class="times">
+    <span id="time-cur">0:00</span>
+    <span id="time-dur">0:00</span>
+  </div>
+
+  <div class="controls">
+    <button id="btn-play" class="play-btn">▶</button>
+  </div>
+
+  <div id="host-panel" style="display:none">
+    <div class="section-label">ADICIONAR À FILA</div>
+    <input id="input-track-url" placeholder="URL da música (mp3, ogg...)">
+    <input id="input-track-name" placeholder="Nome da faixa">
+    <button id="btn-add-track" class="ghost">+ Adicionar</button>
+  </div>
+
+  <div class="section-label">FILA DE MÚSICAS</div>
+  <div id="playlist"></div>
+
+  <div class="section-label">NA SALA</div>
+  <div id="peers"></div>
+
+  <div id="btn-copy" class="link-btn">🔗 Copiar link do convite</div>
+  <p id="room-status" class="status"></p>
+</main>
+
+<audio id="audio" crossorigin="anonymous"></audio>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
